@@ -294,6 +294,9 @@ impl Game {
     }
 
     pub fn get_locked_target(&self) -> LockedTarget {
+        use super::types::Targetable;
+        use super::physics::MAX_LOCK_ON_RANGE;
+
         let dir = self.heli.dir;
         let mut fwd_x = DX[dir];
         let mut fwd_y = DY[dir] * 2.0;
@@ -305,29 +308,39 @@ impl Game {
 
         let mut locked = LockedTarget::None;
         let mut min_dist = f64::MAX;
-        use super::physics::MAX_LOCK_ON_RANGE;
 
-        macro_rules! check_target {
-            ($slice:expr, $variant:ident, $x:ident, $y:ident, $active:ident, $sink:ident) => {
-                for (i, t) in $slice.iter().enumerate() {
-                    if !t.$active || t.$sink > 0 { continue; }
-                    let ddx = t.$x - self.heli.x;
-                    let ddy = (t.$y - self.heli.y) * 2.0;
-                    let dist = (ddx * ddx + ddy * ddy).sqrt();
-                    if dist <= 0.0 || dist > MAX_LOCK_ON_RANGE { continue; }
-                    let dot = fwd_x * (ddx / dist) + fwd_y * (ddy / dist);
-                    if dot >= 0.707 && dist < min_dist {
-                        min_dist = dist;
-                        locked = LockedTarget::$variant(i);
-                    }
+        fn check_slice<T: Targetable>(
+            slice: &[T],
+            heli_x: f64,
+            heli_y: f64,
+            fwd_x: f64,
+            fwd_y: f64,
+            min_dist: &mut f64,
+            locked: &mut LockedTarget,
+        ) {
+            for (i, t) in slice.iter().enumerate() {
+                if !t.is_active() || t.sinking_timer() > 0 {
+                    continue;
                 }
-            };
+                let (tx, ty) = t.position();
+                let ddx = tx - heli_x;
+                let ddy = (ty - heli_y) * 2.0;
+                let dist = (ddx * ddx + ddy * ddy).sqrt();
+                if dist <= 0.0 || dist > MAX_LOCK_ON_RANGE {
+                    continue;
+                }
+                let dot = fwd_x * (ddx / dist) + fwd_y * (ddy / dist);
+                if dot >= 0.707 && dist < *min_dist {
+                    *min_dist = dist;
+                    *locked = T::to_locked_variant(i);
+                }
+            }
         }
 
-        check_target!(self.boats,      Boat,      x, y, active, sinking_timer);
-        check_target!(self.factories,  Factory,   x, y, active, sinking_timer);
-        check_target!(self.tanks,      Tank,      x, y, active, sinking_timer);
-        check_target!(self.static_aas, StaticAA,  x, y, active, sinking_timer);
+        check_slice(&self.boats,      self.heli.x, self.heli.y, fwd_x, fwd_y, &mut min_dist, &mut locked);
+        check_slice(&self.factories,  self.heli.x, self.heli.y, fwd_x, fwd_y, &mut min_dist, &mut locked);
+        check_slice(&self.tanks,      self.heli.x, self.heli.y, fwd_x, fwd_y, &mut min_dist, &mut locked);
+        check_slice(&self.static_aas, self.heli.x, self.heli.y, fwd_x, fwd_y, &mut min_dist, &mut locked);
 
         locked
     }

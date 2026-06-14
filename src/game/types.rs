@@ -232,3 +232,72 @@ pub enum LockedTarget {
     Tank(usize),
     StaticAA(usize),
 }
+
+/// A trait for entities that can be targeted/locked on by the helicopter.
+pub trait Targetable {
+    fn position(&self) -> (f64, f64);
+    fn is_active(&self) -> bool;
+    fn sinking_timer(&self) -> i32;
+    fn to_locked_variant(index: usize) -> LockedTarget;
+}
+
+impl Targetable for Boat {
+    fn position(&self) -> (f64, f64) {
+        (self.x, self.y)
+    }
+    fn is_active(&self) -> bool {
+        self.active
+    }
+    fn sinking_timer(&self) -> i32 {
+        self.sinking_timer
+    }
+    fn to_locked_variant(index: usize) -> LockedTarget {
+        LockedTarget::Boat(index)
+    }
+}
+
+impl Targetable for Factory {
+    fn position(&self) -> (f64, f64) {
+        (self.x, self.y)
+    }
+    fn is_active(&self) -> bool {
+        self.active
+    }
+    fn sinking_timer(&self) -> i32 {
+        self.sinking_timer
+    }
+    fn to_locked_variant(index: usize) -> LockedTarget {
+        LockedTarget::Factory(index)
+    }
+}
+
+impl Targetable for Tank {
+    fn position(&self) -> (f64, f64) {
+        (self.x, self.y)
+    }
+    fn is_active(&self) -> bool {
+        self.active
+    }
+    fn sinking_timer(&self) -> i32 {
+        self.sinking_timer
+    }
+    fn to_locked_variant(index: usize) -> LockedTarget {
+        LockedTarget::Tank(index)
+    }
+}
+
+impl Targetable for StaticAA {
+    fn position(&self) -> (f64, f64) {
+        (self.x, self.y)
+    }
+    fn is_active(&self) -> bool {
+        self.active
+    }
+    fn sinking_timer(&self) -> i32 {
+        self.sinking_timer
+    }
+    fn to_locked_variant(index: usize) -> LockedTarget {
+        LockedTarget::StaticAA(index)
+    }
+}
+

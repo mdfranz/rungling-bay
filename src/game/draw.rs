@@ -6,7 +6,17 @@ use ratatui::{
 };
 
 use super::game::Game;
-use super::types::{LockedTarget, ROTOR_FRAMES, SPRITES};
+use super::types::{
+    LockedTarget, ROTOR_FRAMES, SPRITES,
+    Boat, StealthBoat, Factory, Drone, Tank, StaticAA, Bullet, Missile, Explosion, Helicopter,
+};
+
+// ---------------------------------------------------------------------------
+// Drawable Trait
+// ---------------------------------------------------------------------------
+pub trait Drawable {
+    fn draw(&self, buf: &mut Buffer, area: Rect, game: &Game);
+}
 
 // tcell named-color equivalents
 const NAVY: Color = Color::Rgb(0, 0, 128);
@@ -240,34 +250,52 @@ impl Game {
         self.draw_carrier_smoke(buf, area);
 
         // A. Boats
-        self.draw_boats(buf, area);
+        for boat in &self.boats {
+            boat.draw(buf, area, self);
+        }
 
         // A.1b Stealth boats
-        self.draw_stealth_boats(buf, area);
+        for sb in &self.stealth_boats {
+            sb.draw(buf, area, self);
+        }
 
         // A.2 Factories
-        self.draw_factories(buf, area);
+        for fact in &self.factories {
+            fact.draw(buf, area, self);
+        }
 
         // A.3 Drones
-        self.draw_drones(buf, area);
+        for drone in &self.drones {
+            drone.draw(buf, area, self);
+        }
 
         // A.4 Tanks
-        self.draw_tanks(buf, area);
+        for tank in &self.tanks {
+            tank.draw(buf, area, self);
+        }
 
         // A.5 Static AA
-        self.draw_static_aa(buf, area);
+        for aa in &self.static_aas {
+            aa.draw(buf, area, self);
+        }
 
         // B. Bullets
-        self.draw_bullets(buf, area);
+        for bullet in &self.bullets {
+            bullet.draw(buf, area, self);
+        }
 
         // B.5 Missiles
-        self.draw_missiles(buf, area);
+        for m in &self.missiles {
+            m.draw(buf, area, self);
+        }
 
         // C. Explosions
-        self.draw_explosions(buf, area);
+        for exp in &self.explosions {
+            exp.draw(buf, area, self);
+        }
 
         // 2. Helicopter sprite
-        self.draw_heli(buf, area);
+        self.heli.draw(buf, area, self);
 
         // 3. HUD
         let hud_y = play_h as u16;
@@ -346,107 +374,6 @@ impl Game {
         }
     }
 
-    fn draw_boats(&self, buf: &mut Buffer, area: Rect) {
-        let boat_color = SILVER;
-        let flag_color = Color::Red;
-        for boat in &self.boats {
-            if !boat.active { continue; }
-            let bx = boat.x.round() as i32;
-            let by = boat.y.round() as i32;
-            if boat.vx < 0.0 {
-                self.draw_cell(buf, area, bx - 1, by - 1, '_', boat_color);
-                self.draw_cell(buf, area, bx,     by - 1, '╨', boat_color);
-                self.draw_cell(buf, area, bx + 1, by - 1, '_', boat_color);
-                self.draw_cell(buf, area, bx - 3, by, '/', boat_color);
-                self.draw_cell(buf, area, bx - 2, by, '█', boat_color);
-                self.draw_cell(buf, area, bx - 1, by, '█', flag_color);
-                self.draw_cell(buf, area, bx,     by, '█', boat_color);
-                self.draw_cell(buf, area, bx + 1, by, '█', boat_color);
-                self.draw_cell(buf, area, bx + 2, by, '\\', boat_color);
-                self.draw_cell(buf, area, bx - 5, by + 1, '◄', boat_color);
-                for i in -4..=4i32 { self.draw_cell(buf, area, bx + i, by + 1, '█', boat_color); }
-                self.draw_cell(buf, area, bx + 5, by + 1, '═', boat_color);
-            } else {
-                self.draw_cell(buf, area, bx - 1, by - 1, '_', boat_color);
-                self.draw_cell(buf, area, bx,     by - 1, '╨', boat_color);
-                self.draw_cell(buf, area, bx + 1, by - 1, '_', boat_color);
-                self.draw_cell(buf, area, bx - 2, by, '/', boat_color);
-                self.draw_cell(buf, area, bx - 1, by, '█', boat_color);
-                self.draw_cell(buf, area, bx,     by, '█', flag_color);
-                self.draw_cell(buf, area, bx + 1, by, '█', boat_color);
-                self.draw_cell(buf, area, bx + 2, by, '█', boat_color);
-                self.draw_cell(buf, area, bx + 3, by, '\\', boat_color);
-                self.draw_cell(buf, area, bx - 5, by + 1, '═', boat_color);
-                for i in -4..=4i32 { self.draw_cell(buf, area, bx + i, by + 1, '█', boat_color); }
-                self.draw_cell(buf, area, bx + 5, by + 1, '▶', boat_color);
-            }
-        }
-    }
-
-    fn draw_stealth_boats(&self, buf: &mut Buffer, area: Rect) {
-        for sb in &self.stealth_boats {
-            if !sb.active { continue; }
-            let sx = sb.x.round() as i32;
-            let sy = sb.y.round() as i32;
-            self.draw_cell(buf, area, sx,     sy, '◄', STEALTH_GRAY);
-            self.draw_cell(buf, area, sx + 1, sy, '▬', STEALTH_GRAY);
-            self.draw_cell(buf, area, sx + 2, sy, '▬', STEALTH_GRAY);
-            self.draw_cell(buf, area, sx + 3, sy, '▐', STEALTH_GRAY);
-            self.draw_cell(buf, area, sx + 4, sy, '·', STEALTH_WAKE);
-            self.draw_cell(buf, area, sx + 5, sy, '·', STEALTH_WAKE);
-        }
-    }
-
-    fn draw_factories(&self, buf: &mut Buffer, area: Rect) {
-        const FACTORY_SPRITE: [[char; 17]; 5] = [
-            [' ','░','█','░',' ',' ',' ',' ','☼',' ',' ',' ',' ','░','█','░',' '],
-            [' ','║','█','║',' ',' ','┌','─','┴','─','┐',' ',' ','║','█','║',' '],
-            ['╓','─','╨','─','┴','─','┘',' ',' ',' ','└','─','┴','─','╨','─','╖'],
-            ['║',' ','█',' ',' ','█',' ',' ','█',' ',' ','█',' ',' ','█',' ','║'],
-            ['╙','─','─','─','─','─','[','▓','▓','▓',']','─','─','─','─','─','╜'],
-        ];
-        for (f_idx, fact) in self.factories.iter().enumerate() {
-            if !fact.active { continue; }
-            let fx = fact.x.round() as i32;
-            let fy = fact.y.round() as i32;
-            let is_destroying = fact.sinking_timer > 0;
-
-            for (r, row) in FACTORY_SPRITE.iter().enumerate() {
-                for (c, &sprite_ch) in row.iter().enumerate() {
-                    let ch = sprite_ch;
-                    if ch == ' ' { continue; }
-                    let mx = fx + c as i32 - 8;
-                    let my = fy + r as i32 - 2;
-                    let fg = if is_destroying {
-                        let flicker = (self.ticks + r as i32 + c as i32) % 3;
-                        let (new_ch, fc) = if flicker == 0 { ('▲', Color::Red) }
-                            else if flicker == 1 { ('☼', ORANGE) }
-                            else { ('█', Color::DarkGray) };
-                        self.draw_cell(buf, area, mx, my, new_ch, fc);
-                        continue;
-                    } else {
-                        match ch {
-                            '║' | '┌' | '─' | '┐' | '└' | '┘' | '┴' => SILVER,
-                            '☼' => {
-                                let phase_offset = f_idx as i32 * 4;
-                                if ((self.ticks + phase_offset) / 8) % 2 == 0 { Color::Red } else { Color::Yellow }
-                            }
-                            '▓' => DARK_CYAN_C,
-                            '╓' | '╖' | '╙' | '╜' => STEEL_BLUE,
-                            '░' => Color::DarkGray,
-                            _ => Color::Gray,
-                        }
-                    };
-                    self.draw_cell(buf, area, mx, my, ch, fg);
-                }
-            }
-            if !is_destroying {
-                self.draw_factory_smoke(buf, area, fx - 6, fy - 2);
-                self.draw_factory_smoke(buf, area, fx + 6, fy - 2);
-            }
-        }
-    }
-
     fn draw_factory_smoke(&self, buf: &mut Buffer, area: Rect, sx: i32, sy: i32) {
         for h in 1..=5i32 {
             let wiggle = ((self.ticks as f64 / 5.0 + h as f64).sin() * 0.8) as i32;
@@ -463,182 +390,289 @@ impl Game {
             self.draw_cell(buf, area, sm_x, sm_y, r, fg);
         }
     }
+}
 
-    fn draw_drones(&self, buf: &mut Buffer, area: Rect) {
-        for drone in &self.drones {
-            if !drone.active { continue; }
-            let dx = drone.x.round() as i32;
-            let dy = drone.y.round() as i32;
-            self.draw_cell(buf, area, dx, dy, '⌖', Color::LightCyan);
+// ---------------------------------------------------------------------------
+// Entity Drawable Implementations
+// ---------------------------------------------------------------------------
+
+impl Drawable for Boat {
+    fn draw(&self, buf: &mut Buffer, area: Rect, game: &Game) {
+        let boat_color = SILVER;
+        let flag_color = Color::Red;
+        if !self.active { return; }
+        let bx = self.x.round() as i32;
+        let by = self.y.round() as i32;
+        if self.vx < 0.0 {
+            game.draw_cell(buf, area, bx - 1, by - 1, '_', boat_color);
+            game.draw_cell(buf, area, bx,     by - 1, '╨', boat_color);
+            game.draw_cell(buf, area, bx + 1, by - 1, '_', boat_color);
+            game.draw_cell(buf, area, bx - 3, by, '/', boat_color);
+            game.draw_cell(buf, area, bx - 2, by, '█', boat_color);
+            game.draw_cell(buf, area, bx - 1, by, '█', flag_color);
+            game.draw_cell(buf, area, bx,     by, '█', boat_color);
+            game.draw_cell(buf, area, bx + 1, by, '█', boat_color);
+            game.draw_cell(buf, area, bx + 2, by, '\\', boat_color);
+            game.draw_cell(buf, area, bx - 5, by + 1, '◄', boat_color);
+            for i in -4..=4i32 { game.draw_cell(buf, area, bx + i, by + 1, '█', boat_color); }
+            game.draw_cell(buf, area, bx + 5, by + 1, '═', boat_color);
+        } else {
+            game.draw_cell(buf, area, bx - 1, by - 1, '_', boat_color);
+            game.draw_cell(buf, area, bx,     by - 1, '╨', boat_color);
+            game.draw_cell(buf, area, bx + 1, by - 1, '_', boat_color);
+            game.draw_cell(buf, area, bx - 2, by, '/', boat_color);
+            game.draw_cell(buf, area, bx - 1, by, '█', boat_color);
+            game.draw_cell(buf, area, bx,     by, '█', flag_color);
+            game.draw_cell(buf, area, bx + 1, by, '█', boat_color);
+            game.draw_cell(buf, area, bx + 2, by, '█', boat_color);
+            game.draw_cell(buf, area, bx + 3, by, '\\', boat_color);
+            game.draw_cell(buf, area, bx - 5, by + 1, '═', boat_color);
+            for i in -4..=4i32 { game.draw_cell(buf, area, bx + i, by + 1, '█', boat_color); }
+            game.draw_cell(buf, area, bx + 5, by + 1, '▶', boat_color);
         }
     }
+}
 
-    fn draw_tanks(&self, buf: &mut Buffer, area: Rect) {
-        for tank in &self.tanks {
-            if !tank.active { continue; }
-            let tx = tank.x.round() as i32;
-            let ty = tank.y.round() as i32;
-            let is_burning = tank.sinking_timer > 0;
-            let color = if is_burning { DARK_RED } else { Color::Black };
-            let tread_color = Color::DarkGray;
-            let gun_color = if is_burning { Color::DarkGray } else { SILVER };
-            let fire_color = ORANGE;
+impl Drawable for StealthBoat {
+    fn draw(&self, buf: &mut Buffer, area: Rect, game: &Game) {
+        if !self.active { return; }
+        let sx = self.x.round() as i32;
+        let sy = self.y.round() as i32;
+        game.draw_cell(buf, area, sx,     sy, '◄', STEALTH_GRAY);
+        game.draw_cell(buf, area, sx + 1, sy, '▬', STEALTH_GRAY);
+        game.draw_cell(buf, area, sx + 2, sy, '▬', STEALTH_GRAY);
+        game.draw_cell(buf, area, sx + 3, sy, '▐', STEALTH_GRAY);
+        game.draw_cell(buf, area, sx + 4, sy, '·', STEALTH_WAKE);
+        game.draw_cell(buf, area, sx + 5, sy, '·', STEALTH_WAKE);
+    }
+}
 
-            if tank.patrol_dir == 0 {
-                if tank.vy < 0.0 {
-                    self.draw_cell(buf, area, tx - 1, ty - 1, '║', gun_color);
-                    self.draw_cell(buf, area, tx + 1, ty - 1, '║', gun_color);
-                    self.draw_cell(buf, area, tx - 2, ty, '▒', tread_color);
-                    self.draw_cell(buf, area, tx - 1, ty, '(', color);
-                    self.draw_cell(buf, area, tx,     ty, '▓', color);
-                    self.draw_cell(buf, area, tx + 1, ty, ')', color);
-                    self.draw_cell(buf, area, tx + 2, ty, '▒', tread_color);
-                    self.draw_cell(buf, area, tx - 2, ty + 1, '▒', tread_color);
-                    self.draw_cell(buf, area, tx,     ty + 1, '▄', color);
-                    self.draw_cell(buf, area, tx + 2, ty + 1, '▒', tread_color);
+impl Drawable for Factory {
+    fn draw(&self, buf: &mut Buffer, area: Rect, game: &Game) {
+        const FACTORY_SPRITE: [[char; 17]; 5] = [
+            [' ','░','█','░',' ',' ',' ',' ','☼',' ',' ',' ',' ','░','█','░',' '],
+            [' ','║','█','║',' ',' ','┌','─','┴','─','┐',' ',' ','║','█','║',' '],
+            ['╓','─','╨','─','┴','─','┘',' ',' ',' ','└','─','┴','─','╨','─','╖'],
+            ['║',' ','█',' ',' ','█',' ',' ','█',' ',' ','█',' ',' ','█',' ','║'],
+            ['╙','─','─','─','─','─','[','▓','▓','▓',']','─','─','─','─','─','╜'],
+        ];
+        if !self.active { return; }
+        let fx = self.x.round() as i32;
+        let fy = self.y.round() as i32;
+        let is_destroying = self.sinking_timer > 0;
+        let f_idx = game.factories.iter().position(|f| std::ptr::eq(f, self)).unwrap_or(0);
+
+        for (r, row) in FACTORY_SPRITE.iter().enumerate() {
+            for (c, &sprite_ch) in row.iter().enumerate() {
+                let ch = sprite_ch;
+                if ch == ' ' { continue; }
+                let mx = fx + c as i32 - 8;
+                let my = fy + r as i32 - 2;
+                let fg = if is_destroying {
+                    let flicker = (game.ticks + r as i32 + c as i32) % 3;
+                    let (new_ch, fc) = if flicker == 0 { ('▲', Color::Red) }
+                        else if flicker == 1 { ('☼', ORANGE) }
+                        else { ('█', Color::DarkGray) };
+                    game.draw_cell(buf, area, mx, my, new_ch, fc);
+                    continue;
                 } else {
-                    self.draw_cell(buf, area, tx - 2, ty - 1, '▒', tread_color);
-                    self.draw_cell(buf, area, tx,     ty - 1, '▀', color);
-                    self.draw_cell(buf, area, tx + 2, ty - 1, '▒', tread_color);
-                    self.draw_cell(buf, area, tx - 2, ty, '▒', tread_color);
-                    self.draw_cell(buf, area, tx - 1, ty, '(', color);
-                    self.draw_cell(buf, area, tx,     ty, '▓', color);
-                    self.draw_cell(buf, area, tx + 1, ty, ')', color);
-                    self.draw_cell(buf, area, tx + 2, ty, '▒', tread_color);
-                    self.draw_cell(buf, area, tx - 1, ty + 1, '║', gun_color);
-                    self.draw_cell(buf, area, tx + 1, ty + 1, '║', gun_color);
-                }
-                if is_burning {
-                    let flicker = (self.ticks / 3) % 2;
-                    let (r, c) = if flicker == 0 { ('▲', Color::Red) } else { ('☼', fire_color) };
-                    self.draw_cell(buf, area, tx, ty, r, c);
-                }
+                    match ch {
+                        '║' | '┌' | '─' | '┐' | '└' | '┘' | '┴' => SILVER,
+                        '☼' => {
+                            let phase_offset = f_idx as i32 * 4;
+                            if ((game.ticks + phase_offset) / 8) % 2 == 0 { Color::Red } else { Color::Yellow }
+                        }
+                        '▓' => DARK_CYAN_C,
+                        '╓' | '╖' | '╙' | '╜' => STEEL_BLUE,
+                        '░' => Color::DarkGray,
+                        _ => Color::Gray,
+                    }
+                };
+                game.draw_cell(buf, area, mx, my, ch, fg);
+            }
+        }
+        if !is_destroying {
+            game.draw_factory_smoke(buf, area, fx - 6, fy - 2);
+            game.draw_factory_smoke(buf, area, fx + 6, fy - 2);
+        }
+    }
+}
+
+impl Drawable for Drone {
+    fn draw(&self, buf: &mut Buffer, area: Rect, game: &Game) {
+        if !self.active { return; }
+        let dx = self.x.round() as i32;
+        let dy = self.y.round() as i32;
+        game.draw_cell(buf, area, dx, dy, '⌖', Color::LightCyan);
+    }
+}
+
+impl Drawable for Tank {
+    fn draw(&self, buf: &mut Buffer, area: Rect, game: &Game) {
+        if !self.active { return; }
+        let tx = self.x.round() as i32;
+        let ty = self.y.round() as i32;
+        let is_burning = self.sinking_timer > 0;
+        let color = if is_burning { DARK_RED } else { Color::Black };
+        let tread_color = Color::DarkGray;
+        let gun_color = if is_burning { Color::DarkGray } else { SILVER };
+        let fire_color = ORANGE;
+
+        if self.patrol_dir == 0 {
+            if self.vy < 0.0 {
+                game.draw_cell(buf, area, tx - 1, ty - 1, '║', gun_color);
+                game.draw_cell(buf, area, tx + 1, ty - 1, '║', gun_color);
+                game.draw_cell(buf, area, tx - 2, ty, '▒', tread_color);
+                game.draw_cell(buf, area, tx - 1, ty, '(', color);
+                game.draw_cell(buf, area, tx,     ty, '▓', color);
+                game.draw_cell(buf, area, tx + 1, ty, ')', color);
+                game.draw_cell(buf, area, tx + 2, ty, '▒', tread_color);
+                game.draw_cell(buf, area, tx - 2, ty + 1, '▒', tread_color);
+                game.draw_cell(buf, area, tx,     ty + 1, '▄', color);
+                game.draw_cell(buf, area, tx + 2, ty + 1, '▒', tread_color);
             } else {
-                for i in -2..=2i32 {
-                    self.draw_cell(buf, area, tx + i, ty - 1, if i == -2 || i == 2 { '▄' } else { '▒' }, tread_color);
-                    self.draw_cell(buf, area, tx + i, ty + 1, if i == -2 || i == 2 { '▀' } else { '▒' }, tread_color);
-                }
-                if tank.vx < 0.0 {
-                    self.draw_cell(buf, area, tx - 2, ty, '═', gun_color);
-                    self.draw_cell(buf, area, tx - 1, ty, '═', gun_color);
-                    self.draw_cell(buf, area, tx,     ty, '▓', color);
-                    self.draw_cell(buf, area, tx + 1, ty, '▒', color);
-                    self.draw_cell(buf, area, tx + 2, ty, ']', color);
-                } else {
-                    self.draw_cell(buf, area, tx - 2, ty, '[', color);
-                    self.draw_cell(buf, area, tx - 1, ty, '▒', color);
-                    self.draw_cell(buf, area, tx,     ty, '▓', color);
-                    self.draw_cell(buf, area, tx + 1, ty, '═', gun_color);
-                    self.draw_cell(buf, area, tx + 2, ty, '═', gun_color);
-                }
-                if is_burning {
-                    let flicker = (self.ticks / 3) % 2;
-                    let (r, c) = if flicker == 0 { ('▲', Color::Red) } else { ('☼', fire_color) };
-                    self.draw_cell(buf, area, tx, ty, r, c);
-                }
+                game.draw_cell(buf, area, tx - 2, ty - 1, '▒', tread_color);
+                game.draw_cell(buf, area, tx,     ty - 1, '▀', color);
+                game.draw_cell(buf, area, tx + 2, ty - 1, '▒', tread_color);
+                game.draw_cell(buf, area, tx - 2, ty, '▒', tread_color);
+                game.draw_cell(buf, area, tx - 1, ty, '(', color);
+                game.draw_cell(buf, area, tx,     ty, '▓', color);
+                game.draw_cell(buf, area, tx + 1, ty, ')', color);
+                game.draw_cell(buf, area, tx + 2, ty, '▒', tread_color);
+                game.draw_cell(buf, area, tx - 1, ty + 1, '║', gun_color);
+                game.draw_cell(buf, area, tx + 1, ty + 1, '║', gun_color);
             }
-        }
-    }
-
-    fn draw_static_aa(&self, buf: &mut Buffer, area: Rect) {
-        for aa in &self.static_aas {
-            if !aa.active { continue; }
-            let ax = aa.x.round() as i32;
-            let ay = aa.y.round() as i32;
-            let is_burning = aa.sinking_timer > 0;
-            let gun_color = if is_burning { Color::DarkGray } else { SILVER };
-            let base_color = if is_burning { DARK_RED } else { DARK_CYAN_C };
-            let shield_color = Color::DarkGray;
-            let center_color = if is_burning { ORANGE } else { Color::Red };
-            let fire_color = ORANGE;
-
-            self.draw_cell(buf, area, ax - 1, ay - 1, '║', gun_color);
-            self.draw_cell(buf, area, ax + 1, ay - 1, '║', gun_color);
-            self.draw_cell(buf, area, ax - 1, ay, '▕', shield_color);
-            self.draw_cell(buf, area, ax,     ay, '╬', base_color);
-            self.draw_cell(buf, area, ax + 1, ay, '▏', shield_color);
-            if !is_burning && (self.ticks / 10) % 2 == 0 {
-                self.draw_cell(buf, area, ax, ay, '☼', center_color);
-            }
-            self.draw_cell(buf, area, ax - 1, ay + 1, '▀', shield_color);
-            self.draw_cell(buf, area, ax,     ay + 1, '█', shield_color);
-            self.draw_cell(buf, area, ax + 1, ay + 1, '▀', shield_color);
             if is_burning {
-                let flicker = (self.ticks / 3) % 2;
+                let flicker = (game.ticks / 3) % 2;
                 let (r, c) = if flicker == 0 { ('▲', Color::Red) } else { ('☼', fire_color) };
-                self.draw_cell(buf, area, ax, ay, r, c);
+                game.draw_cell(buf, area, tx, ty, r, c);
             }
-        }
-    }
-
-    fn draw_bullets(&self, buf: &mut Buffer, area: Rect) {
-        for bullet in &self.bullets {
-            if !bullet.active { continue; }
-            let bx = bullet.x.round() as i32;
-            let by = bullet.y.round() as i32;
-            let sx = bx - self.cam_x;
-            let sy = by - self.cam_y;
-            let play_h = area.height.saturating_sub(6) as i32;
-            if sx >= 0 && sx < self.width && sy >= 0 && sy < play_h {
-                let fg = if bullet.is_enemy { Color::Red } else { Color::Yellow };
-                let style = self.get_map_style(bx, by).fg(fg);
-                self.set_at(buf, area, sx as u16, sy as u16, '•', style);
+        } else {
+            for i in -2..=2i32 {
+                game.draw_cell(buf, area, tx + i, ty - 1, if i == -2 || i == 2 { '▄' } else { '▒' }, tread_color);
+                game.draw_cell(buf, area, tx + i, ty + 1, if i == -2 || i == 2 { '▀' } else { '▒' }, tread_color);
             }
-        }
-    }
-
-    fn draw_missiles(&self, buf: &mut Buffer, area: Rect) {
-        for m in &self.missiles {
-            if !m.active { continue; }
-            let mx = m.x.round() as i32;
-            let my = m.y.round() as i32;
-            let sx = mx - self.cam_x;
-            let sy = my - self.cam_y;
-            let play_h = area.height.saturating_sub(6) as i32;
-            if sx < 0 || sx >= self.width || sy < 0 || sy >= play_h { continue; }
-            let ch = if m.vx.abs() > m.vy.abs() {
-                if m.vx > 0.0 { '►' } else { '◄' }
+            if self.vx < 0.0 {
+                game.draw_cell(buf, area, tx - 2, ty, '═', gun_color);
+                game.draw_cell(buf, area, tx - 1, ty, '═', gun_color);
+                game.draw_cell(buf, area, tx,     ty, '▓', color);
+                game.draw_cell(buf, area, tx + 1, ty, '▒', color);
+                game.draw_cell(buf, area, tx + 2, ty, ']', color);
             } else {
-                if m.vy > 0.0 { '▼' } else { '▲' }
-            };
-            let fg = if m.is_enemy { Color::Red } else { ORANGE };
-            let style = self.get_map_style(mx, my).fg(fg).add_modifier(Modifier::BOLD);
-            self.set_at(buf, area, sx as u16, sy as u16, ch, style);
+                game.draw_cell(buf, area, tx - 2, ty, '[', color);
+                game.draw_cell(buf, area, tx - 1, ty, '▒', color);
+                game.draw_cell(buf, area, tx,     ty, '▓', color);
+                game.draw_cell(buf, area, tx + 1, ty, '═', gun_color);
+                game.draw_cell(buf, area, tx + 2, ty, '═', gun_color);
+            }
+            if is_burning {
+                let flicker = (game.ticks / 3) % 2;
+                let (r, c) = if flicker == 0 { ('▲', Color::Red) } else { ('☼', fire_color) };
+                game.draw_cell(buf, area, tx, ty, r, c);
+            }
         }
     }
+}
 
-    fn draw_explosions(&self, buf: &mut Buffer, area: Rect) {
-        for exp in &self.explosions {
-            let ex = exp.x;
-            let ey = exp.y;
-            let sx = ex - self.cam_x;
-            let sy = ey - self.cam_y;
-            let play_h = area.height.saturating_sub(6) as i32;
-            if sx < 0 || sx >= self.width || sy < 0 || sy >= play_h { continue; }
-            let (r, fg) = if exp.age < 4 { ('*', Color::Yellow) }
-                else if exp.age < 9 { ('¤', ORANGE) }
-                else { ('·', Color::DarkGray) };
-            let style = self.get_map_style(ex, ey).fg(fg);
-            self.set_at(buf, area, sx as u16, sy as u16, r, style);
+impl Drawable for StaticAA {
+    fn draw(&self, buf: &mut Buffer, area: Rect, game: &Game) {
+        if !self.active { return; }
+        let ax = self.x.round() as i32;
+        let ay = self.y.round() as i32;
+        let is_burning = self.sinking_timer > 0;
+        let gun_color = if is_burning { Color::DarkGray } else { SILVER };
+        let base_color = if is_burning { DARK_RED } else { DARK_CYAN_C };
+        let shield_color = Color::DarkGray;
+        let center_color = if is_burning { ORANGE } else { Color::Red };
+        let fire_color = ORANGE;
+
+        game.draw_cell(buf, area, ax - 1, ay - 1, '║', gun_color);
+        game.draw_cell(buf, area, ax + 1, ay - 1, '║', gun_color);
+        game.draw_cell(buf, area, ax - 1, ay, '▕', shield_color);
+        game.draw_cell(buf, area, ax,     ay, '╬', base_color);
+        game.draw_cell(buf, area, ax + 1, ay, '▏', shield_color);
+        if !is_burning && (game.ticks / 10) % 2 == 0 {
+            game.draw_cell(buf, area, ax, ay, '☼', center_color);
+        }
+        game.draw_cell(buf, area, ax - 1, ay + 1, '▀', shield_color);
+        game.draw_cell(buf, area, ax,     ay + 1, '█', shield_color);
+        game.draw_cell(buf, area, ax + 1, ay + 1, '▀', shield_color);
+        if is_burning {
+            let flicker = (game.ticks / 3) % 2;
+            let (r, c) = if flicker == 0 { ('▲', Color::Red) } else { ('☼', fire_color) };
+            game.draw_cell(buf, area, ax, ay, r, c);
         }
     }
+}
 
-    fn draw_heli(&self, buf: &mut Buffer, area: Rect) {
-        let h = &self.heli;
-        let hx = h.x.round() as i32;
-        let hy = h.y.round() as i32;
-        let rotor_char = ROTOR_FRAMES[h.rotor_state % 4];
+impl Drawable for Bullet {
+    fn draw(&self, buf: &mut Buffer, area: Rect, game: &Game) {
+        if !self.active { return; }
+        let bx = self.x.round() as i32;
+        let by = self.y.round() as i32;
+        let sx = bx - game.cam_x;
+        let sy = by - game.cam_y;
+        let play_h = area.height.saturating_sub(6) as i32;
+        if sx >= 0 && sx < game.width && sy >= 0 && sy < play_h {
+            let fg = if self.is_enemy { Color::Red } else { Color::Yellow };
+            let style = game.get_map_style(bx, by).fg(fg);
+            game.set_at(buf, area, sx as u16, sy as u16, '•', style);
+        }
+    }
+}
+
+impl Drawable for Missile {
+    fn draw(&self, buf: &mut Buffer, area: Rect, game: &Game) {
+        if !self.active { return; }
+        let mx = self.x.round() as i32;
+        let my = self.y.round() as i32;
+        let sx = mx - game.cam_x;
+        let sy = my - game.cam_y;
+        let play_h = area.height.saturating_sub(6) as i32;
+        if sx < 0 || sx >= game.width || sy < 0 || sy >= play_h { return; }
+        let ch = if self.vx.abs() > self.vy.abs() {
+            if self.vx > 0.0 { '►' } else { '◄' }
+        } else {
+            if self.vy > 0.0 { '▼' } else { '▲' }
+        };
+        let fg = if self.is_enemy { Color::Red } else { ORANGE };
+        let style = game.get_map_style(mx, my).fg(fg).add_modifier(Modifier::BOLD);
+        game.set_at(buf, area, sx as u16, sy as u16, ch, style);
+    }
+}
+
+impl Drawable for Explosion {
+    fn draw(&self, buf: &mut Buffer, area: Rect, game: &Game) {
+        let ex = self.x;
+        let ey = self.y;
+        let sx = ex - game.cam_x;
+        let sy = ey - game.cam_y;
+        let play_h = area.height.saturating_sub(6) as i32;
+        if sx < 0 || sx >= game.width || sy < 0 || sy >= play_h { return; }
+        let (r, fg) = if self.age < 4 { ('*', Color::Yellow) }
+            else if self.age < 9 { ('¤', ORANGE) }
+            else { ('·', Color::DarkGray) };
+        let style = game.get_map_style(ex, ey).fg(fg);
+        game.set_at(buf, area, sx as u16, sy as u16, r, style);
+    }
+}
+
+impl Drawable for Helicopter {
+    fn draw(&self, buf: &mut Buffer, area: Rect, game: &Game) {
+        let hx = self.x.round() as i32;
+        let hy = self.y.round() as i32;
+        let rotor_char = ROTOR_FRAMES[self.rotor_state % 4];
         let play_h = area.height.saturating_sub(6) as i32;
 
-        for (r, row) in SPRITES[h.dir % 8].iter().enumerate() {
+        for (r, row) in SPRITES[self.dir % 8].iter().enumerate() {
             for (c, &sprite_ch) in row.iter().enumerate() {
                 let mut ch = sprite_ch;
                 if ch == ' ' { continue; }
                 let mx = hx + c as i32 - 3;
                 let my = hy + r as i32 - 2;
-                let sx = mx - self.cam_x;
-                let sy = my - self.cam_y;
-                if sx < 0 || sx >= self.width || sy < 0 || sy >= play_h { continue; }
+                let sx = mx - game.cam_x;
+                let sy = my - game.cam_y;
+                if sx < 0 || sx >= game.width || sy < 0 || sy >= play_h { continue; }
 
                 let is_rotor = ch == '*';
                 if is_rotor { ch = rotor_char; }
@@ -654,8 +688,8 @@ impl Game {
                         _ => Color::White,
                     }
                 };
-                let style = self.get_map_style(mx, my).fg(fg);
-                self.set_at(buf, area, sx as u16, sy as u16, ch, style);
+                let style = game.get_map_style(mx, my).fg(fg);
+                game.set_at(buf, area, sx as u16, sy as u16, ch, style);
             }
         }
     }

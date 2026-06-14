@@ -566,6 +566,78 @@ impl Widget for &Game {
 }
 ```
 
+#### 4. `Drawable` (Local Trait)
+The `Drawable` trait in [src/game/draw.rs](src/game/draw.rs) gives each entity responsibility for rendering itself, rather than putting all drawing logic in `Game`:
+
+```rust
+pub trait Drawable {
+    fn draw(&self, buf: &mut Buffer, area: Rect, game: &Game);
+}
+```
+
+Each entity type — `Boat`, `Tank`, `Missile`, `Helicopter`, etc. — implements this trait with its own rendering logic. The main draw loop becomes a clean, uniform iteration:
+
+```rust
+// Before: Game had a separate draw_boats(), draw_tanks(), etc.
+// After: each entity knows how to draw itself
+for boat in &self.boats {
+    boat.draw(buf, area, self);
+}
+for tank in &self.tanks {
+    tank.draw(buf, area, self);
+}
+```
+
+**Why?** The trait separates concerns: a `Boat` knows what it looks like; `Game` knows what order to draw things. Adding a new entity type only requires implementing `Drawable`, not modifying `Game`'s draw method.
+
+#### 5. `Targetable` (Local Trait with Trait Bounds)
+The `Targetable` trait in [src/game/types.rs](src/game/types.rs) abstracts what the lock-on system needs from any targetable entity:
+
+```rust
+pub trait Targetable {
+    fn position(&self) -> (f64, f64);
+    fn is_active(&self) -> bool;
+    fn sinking_timer(&self) -> i32;
+    fn to_locked_variant(index: usize) -> LockedTarget; // associated function — no &self
+}
+```
+
+Note `to_locked_variant` has **no `&self`** — it is an *associated function* (Rust's equivalent of a static method). Each implementing type uses it to construct the correct `LockedTarget` enum variant without needing an instance:
+
+```rust
+impl Targetable for Boat {
+    fn position(&self) -> (f64, f64) { (self.x, self.y) }
+    fn is_active(&self) -> bool { self.active }
+    fn sinking_timer(&self) -> i32 { self.sinking_timer }
+    fn to_locked_variant(index: usize) -> LockedTarget { LockedTarget::Boat(index) }
+}
+// ... same pattern for Factory, Tank, StaticAA
+```
+
+This trait enables a **generic function with a trait bound** in [src/game/input.rs](src/game/input.rs):
+
+```rust
+fn check_slice<T: Targetable>(
+    slice: &[T],
+    heli_x: f64,
+    heli_y: f64,
+    fwd_x: f64,
+    fwd_y: f64,
+    min_dist: &mut f64,
+    locked: &mut LockedTarget,
+) {
+    for (i, t) in slice.iter().enumerate() {
+        if !t.is_active() || t.sinking_timer() > 0 { continue; }
+        let (tx, ty) = t.position();
+        let ddx = tx - heli_x;
+        // ...
+        *locked = T::to_locked_variant(i);  // call associated function via the type parameter
+    }
+}
+```
+
+The syntax `<T: Targetable>` is a **trait bound** — "this function works for any type `T`, as long as `T` implements `Targetable`." The compiler generates a separate specialized copy for each concrete type (`Boat`, `Tank`, etc.) with zero runtime overhead.
+
 ---
 
 ## 17. `macro_rules!` (Macros)
@@ -574,52 +646,63 @@ impl Widget for &Game {
 
 Declarative macros (`macro_rules!`) write code that writes other code. They eliminate duplication when the same logic applies to different types, all while maintaining compile-time type-safety.
 
-In [src/game/input.rs](src/game/input.rs), the lock-on targeting system scans four different entity collections: `boats`, `factories`, `tanks`, and `static_aas`. Each has similar fields (`x`, `y`, `active`, `sinking_timer`) but is a different struct. Without a macro, the search loop would be copy-pasted four times.
+### Macros vs. Generics: A Progression
 
-Instead, a **local macro** parameterizes the differences:
+The lock-on targeting system in [src/game/input.rs](src/game/input.rs) is a good example of a common refactoring journey in Rust.
+
+**The problem:** scan four entity collections (`boats`, `factories`, `tanks`, `static_aas`) with the same search logic. Each is a different struct, so a simple loop won't generalize.
+
+**Approach 1 — Local Macro:** Before the `Targetable` trait existed, a `macro_rules!` macro parameterized the field names:
 
 ```rust
-pub fn get_locked_target(&self) -> LockedTarget {
-    // ... setup: helicopter position, facing direction, etc.
-    let mut locked = LockedTarget::None;
-    let mut min_dist = f64::MAX;
+macro_rules! check_target {
+    ($slice:expr, $variant:ident, $x:ident, $y:ident, $active:ident, $sink:ident) => {
+        for (i, t) in $slice.iter().enumerate() {
+            if !t.$active || t.$sink > 0 { continue; }
+            let ddx = t.$x - self.heli.x;
+            // ... dot-product, distance check ...
+            locked = LockedTarget::$variant(i);
+        }
+    };
+}
 
-    // Local macro: defines one parametric search loop
-    macro_rules! check_target {
-        // Macro signature: names for the parameters we'll substitute
-        ($slice:expr, $variant:ident, $x:ident, $y:ident, $active:ident, $sink:ident) => {
-            // Macro body: the code to repeat
-            for (i, t) in $slice.iter().enumerate() {
-                if !t.$active || t.$sink > 0 { continue; }
-                let ddx = t.$x - self.heli.x;
-                let ddy = (t.$y - self.heli.y) * 2.0;
-                let dist = (ddx * ddx + ddy * ddy).sqrt();
-                if dist <= 0.0 || dist > MAX_LOCK_ON_RANGE { continue; }
-                let dot = fwd_x * (ddx / dist) + fwd_y * (ddy / dist);
-                if dot >= 0.707 && dist < min_dist {
-                    min_dist = dist;
-                    locked = LockedTarget::$variant(i);  // Use variant parameter
-                }
-            }
-        };
+check_target!(self.boats,      Boat,      x, y, active, sinking_timer);
+check_target!(self.factories,  Factory,   x, y, active, sinking_timer);
+check_target!(self.tanks,      Tank,      x, y, active, sinking_timer);
+check_target!(self.static_aas, StaticAA,  x, y, active, sinking_timer);
+```
+
+**Macro parameters:**
+- `$slice:expr` — any expression evaluating to a collection
+- `$variant:ident` — an identifier token used to construct an enum variant (e.g., `Boat`)
+- `$x:ident`, `$y:ident`, `$active:ident`, `$sink:ident` — field accessor names that differ per struct
+
+The macro works because it operates on *tokens*, not types — it substitutes `t.x`, `t.active`, etc. textually before the compiler sees the code.
+
+**Approach 2 — Generic Function with Trait Bound:** Once the `Targetable` trait (see [Section 16](#16-traits)) was introduced, the macro was replaced with a proper generic function:
+
+```rust
+fn check_slice<T: Targetable>(slice: &[T], heli_x: f64, heli_y: f64, ...) {
+    for (i, t) in slice.iter().enumerate() {
+        if !t.is_active() || t.sinking_timer() > 0 { continue; }
+        let (tx, ty) = t.position();
+        // ... same logic, via trait methods ...
+        *locked = T::to_locked_variant(i);
     }
-
-    // Call the macro four times with different entity types
-    check_target!(self.boats,      Boat,      x, y, active, sinking_timer);
-    check_target!(self.factories,  Factory,   x, y, active, sinking_timer);
-    check_target!(self.tanks,      Tank,      x, y, active, sinking_timer);
-    check_target!(self.static_aas, StaticAA,  x, y, active, sinking_timer);
-
-    locked
 }
 ```
 
-**Macro parameters explained:**
-- `$slice:expr` — any Rust expression (e.g., `self.boats`) that evaluates to a collection
-- `$variant:ident` — an identifier token (e.g., `Boat`) used to construct the enum variant
-- `$x:ident`, `$y:ident`, `$active:ident`, `$sink:ident` — field accessor names that differ per entity (e.g., `Boat` has `x`, `y`, `active`, `sinking_timer`)
+**Which to prefer?**
 
-**Why macros?** Each entity type is different (they're separate structs), so you can't use a generic function. Macros let you "stamp out" the same logic for each type, substituting the field names and variant names. The result is compiled independently for each type, so there's no runtime cost—just compile-time expansion.
+| | Macro | Generic + Trait |
+| --- | --- | --- |
+| Works when types share fields by name | ✅ | ❌ (needs common interface) |
+| Works when types share a trait | ✅ | ✅ |
+| Type-checked at each call site | ❌ (token substitution) | ✅ |
+| Shows up in IDE autocomplete / docs | ❌ | ✅ |
+| Requires defining a trait | ❌ | ✅ |
+
+**When to still use macros:** If the types involved don't share a common interface and defining one would be impractical, a local macro is a pragmatic choice. Macros are also the only option when you need to vary *field names* (not just values), since Rust generics operate on values and types, not identifiers.
 
 ---
 
