@@ -34,7 +34,7 @@ Whether you are learning Rust or reviewing this specific codebase, this guide hi
 ### Arrays and Slices
 Rust arrays have a fixed size known at compile time, written as `[T; N]`. Slices are dynamically sized views into a contiguous sequence of elements, written as `[T]`.
 
-In [src/game/types.rs](file:///home/mdfranz/github/rungling-bay/src/game/types.rs), fixed-size arrays and multi-dimensional arrays represent assets and physics constants:
+In [src/game/types.rs](src/game/types.rs), fixed-size arrays and multi-dimensional arrays represent assets and physics constants:
 
 ```rust
 // 1D array of string slices for directions
@@ -55,7 +55,7 @@ pub const SPRITES: [[[char; 7]; 5]; 8] = [
 ```
 
 ### Tuples
-Tuples are ordered collections of values of different types, written as `(T1, T2, ...)`. In [src/main.rs](file:///home/mdfranz/github/rungling-bay/src/main.rs), tuples are used to bind multiple variables returned by standard library operations:
+Tuples are ordered collections of values of different types, written as `(T1, T2, ...)`. In [src/main.rs](src/main.rs), tuples are used to bind multiple variables returned by standard library operations:
 
 ```rust
 // Destructuring a tuple returned by the tracing library
@@ -72,7 +72,7 @@ let (audio_tx, audio_rx) = mpsc::channel::<game::sound::SoundType>();
 *Rust by Example References: [Structures](https://doc.rust-lang.org/rust-by-example/custom_types/structs.html), [Enums](https://doc.rust-lang.org/rust-by-example/custom_types/enum.html)*
 
 ### Structures
-Rust supports C-like structs, tuple structs, and unit structs. In [src/game/types.rs](file:///home/mdfranz/github/rungling-bay/src/game/types.rs), structures group the properties of game entities:
+Rust supports C-like structs, tuple structs, and unit structs. In [src/game/types.rs](src/game/types.rs), structures group the properties of game entities:
 
 ```rust
 #[derive(Debug, Clone)]
@@ -93,7 +93,7 @@ pub struct Helicopter {
 ### Enums (Algebraic Data Types)
 Unlike C-style enums, Rust enums can contain payloads. These are known as *sum types* or *Algebraic Data Types (ADTs)*.
 
-In [src/game/types.rs](file:///home/mdfranz/github/rungling-bay/src/game/types.rs), the lock-on targeting system is implemented with an enum that stores the index of the locked entity:
+In [src/game/types.rs](src/game/types.rs), the lock-on targeting system is implemented with an enum that stores the index of the locked entity:
 
 ```rust
 #[derive(Debug, Clone, PartialEq)]
@@ -106,7 +106,7 @@ pub enum LockedTarget {
 }
 ```
 
-In [src/game/input.rs](file:///home/mdfranz/github/rungling-bay/src/game/input.rs), the `InputMsg` enum wraps different types of keyboard or terminal events sent over a channel:
+In [src/game/input.rs](src/game/input.rs), the `InputMsg` enum wraps different types of keyboard or terminal events sent over a channel:
 
 ```rust
 pub enum InputMsg {
@@ -124,7 +124,7 @@ pub enum InputMsg {
 ### Casting with `as`
 Rust requires explicit casting between scalar types; there is no implicit widening (e.g., `i32` → `i64`) or narrowing (e.g., `f64` → `i32`) conversion. This forces you to think about precision loss and overflow.
 
-In [src/game/draw.rs](file:///home/mdfranz/github/rungling-bay/src/game/draw.rs), coordinates bridge two systems:
+In [src/game/draw.rs](src/game/draw.rs), coordinates bridge two systems:
 - **Physics engine:** uses `f64` for sub-pixel precision and smooth motion
 - **Terminal rendering (ratatui):** uses `u16` (0–65535) for screen cell addresses
 
@@ -144,7 +144,7 @@ self.set_at(buf, area, sx as u16, sy as u16, ch, style);
 ### Type Inference
 Rust's compiler infers the type of variables by analyzing how they are used downstream. Rather than requiring explicit type annotations everywhere, the compiler works *backwards* from usage sites to determine what types must flow through.
 
-In [src/main.rs](file:///home/mdfranz/github/rungling-bay/src/main.rs), a `HashMap` is instantiated without type parameters:
+In [src/main.rs](src/main.rs), a `HashMap` is instantiated without type parameters:
 
 ```rust
 let mut last_play_time = std::collections::HashMap::new();
@@ -180,13 +180,13 @@ let mut data: HashMap<String, i32> = HashMap::new();
 
 Rust is an expression-oriented language: almost every statement (including blocks, `if` statements, and `match` statements) can return a value. 
 
-In [src/game/input.rs](file:///home/mdfranz/github/rungling-bay/src/game/input.rs), a conditional expression evaluates directly into a variable binding:
+In [src/game/input.rs](src/game/input.rs), a conditional expression evaluates directly into a variable binding:
 
 ```rust
 let thrust = if self.heli.fuel <= 0.0 { 0.0 } else { 0.18 };
 ```
 
-In [src/main.rs](file:///home/mdfranz/github/rungling-bay/src/main.rs), a `match` expression resolves the sound characteristics:
+In [src/main.rs](src/main.rs), a `match` expression resolves the sound characteristics:
 
 ```rust
 let (dur, volume) = match sound_type {
@@ -207,7 +207,7 @@ let (dur, volume) = match sound_type {
 ### Pattern Matching & Match Guards
 `match` expressions check patterns exhaustively. A **match guard** (`_ if condition => ...`) adds an extra conditional check to a match arm, allowing one pattern to branch on multiple conditions.
 
-In [src/game/input.rs](file:///home/mdfranz/github/rungling-bay/src/game/input.rs), the quit confirmation dialog uses guards to handle user input:
+In [src/game/input.rs](src/game/input.rs), the quit confirmation dialog uses guards to handle user input:
 
 ```rust
 // Player pressed Ctrl+C; we're asking "Are you sure? (y/n)"
@@ -237,7 +237,7 @@ if self.quit_confirming {
 **Why use a guard?** Without it, you'd need to check `ctrl_c` inside the match arm. With a guard, the control flow is cleaner: match on the *structure* (any key code), then filter by *logic* (is it Ctrl+C?).
 
 ### `while let` Loop
-The `while let` construct is a cleaner alternative to matching repeatedly in a loop. In [src/main.rs](file:///home/mdfranz/github/rungling-bay/src/main.rs), it polls and drains all messages currently available on the input channel:
+The `while let` construct is a cleaner alternative to matching repeatedly in a loop. In [src/main.rs](src/main.rs), it polls and drains all messages currently available on the input channel:
 
 ```rust
 // Drain any additional buffered key events before executing the physics tick
@@ -257,7 +257,7 @@ while let Ok(msg) = rx.try_recv() {
 ```
 
 ### `matches!` Macro
-The `matches!` macro returns `true` if an expression matches a pattern. In [src/game/input.rs](file:///home/mdfranz/github/rungling-bay/src/game/input.rs), it is used to check key inputs concisely:
+The `matches!` macro returns `true` if an expression matches a pattern. In [src/game/input.rs](src/game/input.rs), it is used to check key inputs concisely:
 
 ```rust
 if matches!(key.code, KeyCode::Char('l') | KeyCode::Char('L'))
@@ -276,24 +276,24 @@ if matches!(key.code, KeyCode::Char('l') | KeyCode::Char('L'))
 ### Multi-File Implementation Blocks
 In Rust, you can define multiple `impl` blocks for the same struct across different files (as long as they're in the same module/crate). This is a powerful organizational tool: you can grow a type's functionality without cramming everything into one bloated file.
 
-The `Game` struct has its state defined in [src/game/game.rs](file:///home/mdfranz/github/rungling-bay/src/game/game.rs), but its methods are distributed by responsibility:
-- `impl Game` (Input Processing): [src/game/input.rs](file:///home/mdfranz/github/rungling-bay/src/game/input.rs)
-- `impl Game` (Physics Engine): [src/game/physics.rs](file:///home/mdfranz/github/rungling-bay/src/game/physics.rs)
-- `impl Game` (Drawing Engine): [src/game/draw.rs](file:///home/mdfranz/github/rungling-bay/src/game/draw.rs)
+The `Game` struct has its state defined in [src/game/game.rs](src/game/game.rs), but its methods are distributed by responsibility:
+- `impl Game` (Input Processing): [src/game/input.rs](src/game/input.rs)
+- `impl Game` (Physics Engine): [src/game/physics.rs](src/game/physics.rs)
+- `impl Game` (Drawing Engine): [src/game/draw.rs](src/game/draw.rs)
 
 **Why?** A monolithic `impl Game` block would be thousands of lines—hard to navigate, hard to review, hard to maintain. By splitting across files, each file has a clear purpose:
-- `input.rs` handles keyboard and joystick events
-- `physics.rs` handles entity updates, collisions, targeting
-- `draw.rs` handles rendering to the terminal
+- [input.rs](src/game/input.rs) handles keyboard and joystick events
+- [physics.rs](src/game/physics.rs) handles entity updates, collisions, targeting
+- [draw.rs](src/game/draw.rs) handles rendering to the terminal
 
-When you modify rendering logic, you touch `draw.rs`. When you fix a physics bug, you touch `physics.rs`. The code organization matches the architectural separation.
+When you modify rendering logic, you touch [draw.rs](src/game/draw.rs). When you fix a physics bug, you touch [physics.rs](src/game/physics.rs). The code organization matches the architectural separation.
 
 The compiler treats all `impl` blocks as equivalent—the split is purely for human readability and maintainability.
 
 ### Closures
 Closures are anonymous functions that can capture variables from their enclosing environment. 
 
-In [src/main.rs](file:///home/mdfranz/github/rungling-bay/src/main.rs), `terminal.draw` accepts a closure that receives a terminal `Frame` and renders the game UI:
+In [src/main.rs](src/main.rs), `terminal.draw` accepts a closure that receives a terminal `Frame` and renders the game UI:
 
 ```rust
 terminal.draw(|frame| {
@@ -301,7 +301,7 @@ terminal.draw(|frame| {
 })?;
 ```
 
-Closures are also used in iterator combinators throughout the game logic to transform and filter collections. In [src/game/input.rs](file:///home/mdfranz/github/rungling-bay/src/game/input.rs), counting active player-controlled missiles uses a pipeline:
+Closures are also used in iterator combinators throughout the game logic to transform and filter collections. In [src/game/input.rs](src/game/input.rs), counting active player-controlled missiles uses a pipeline:
 
 ```rust
 let active_count = self
@@ -334,7 +334,7 @@ for m in &self.missiles {
 *Rust by Example References: [Modules](https://doc.rust-lang.org/rust-by-example/mod.html), [Cargo](https://doc.rust-lang.org/rust-by-example/cargo.html)*
 
 ### Module Structure
-Rungling Bay divides modules into files. [src/main.rs](file:///home/mdfranz/github/rungling-bay/src/main.rs) registers the root module `mod game;`, and [src/game/mod.rs](file:///home/mdfranz/github/rungling-bay/src/game/mod.rs) exposes its submodules to the program:
+Rungling Bay divides modules into files. [src/main.rs](src/main.rs) registers the root module `mod game;`, and [src/game/mod.rs](src/game/mod.rs) exposes its submodules to the program:
 
 ```rust
 pub mod draw;
@@ -355,7 +355,7 @@ use super::types::{LockedTarget, DX, DY};
 ```
 
 ### Cargo Manifest
-Third-party libraries are declared in [Cargo.toml](file:///home/mdfranz/github/rungling-bay/Cargo.toml):
+Third-party libraries are declared in [Cargo.toml](Cargo.toml):
 
 ```toml
 [dependencies]
@@ -375,7 +375,7 @@ rand = "0.9"            # Random number generator
 ### Ownership Transfer (Moves)
 When an object is assigned to another variable or passed by value to a function, its ownership is transferred. The compiler ensures the original variable can no longer be read.
 
-In [src/main.rs](file:///home/mdfranz/github/rungling-bay/src/main.rs), we spawn an audio thread using a `move` closure:
+In [src/main.rs](src/main.rs), we spawn an audio thread using a `move` closure:
 
 ```rust
 // Spawn audio playback thread and move the channel receiver `audio_rx` into it
@@ -392,7 +392,7 @@ By placing the `move` keyword before the closure arguments, ownership of `audio_
 ### Borrow Checker Patterns (Preventing Alias Conflicts)
 Rust guarantees memory safety by enforcing a rule: **either many immutable references (`&T`) OR exactly one mutable reference (`&mut T`)** to the same data at any time. This prevents data races and use-after-free bugs.
 
-In [src/game/physics.rs](file:///home/mdfranz/github/rungling-bay/src/game/physics.rs), missile updates must search other entities (boats, tanks, factories) for targeting. The naive approach fails:
+In [src/game/physics.rs](src/game/physics.rs), missile updates must search other entities (boats, tanks, factories) for targeting. The naive approach fails:
 
 ```rust
 // ❌ Compiler error:
@@ -440,7 +440,7 @@ for i in 0..self.missiles.len() {
 ### Lifetime Elision
 Every reference in Rust has an invisible "lifetime" — a label that specifies how long the reference is valid. Without lifetimes, the compiler cannot guarantee you won't use a reference after the data it points to has been deallocated. Fortunately, Rust infers lifetimes automatically in most cases using simple rules.
 
-In [src/game/input.rs](file:///home/mdfranz/github/rungling-bay/src/game/input.rs), the signature below elides lifetimes:
+In [src/game/input.rs](src/game/input.rs), the signature below elides lifetimes:
 
 ```rust
 pub fn handle_raw_key(&mut self, key: &KeyEvent) -> bool
@@ -471,7 +471,7 @@ fn get_name<'a>(a: &'a Boat, b: &Tank) -> &'a str { ... }
 *Rust by Example References: [Derive](https://doc.rust-lang.org/rust-by-example/trait/derive.html), [Iterator](https://doc.rust-lang.org/rust-by-example/trait/iter.html), [Traits](https://doc.rust-lang.org/rust-by-example/trait.html)*
 
 ### Deriving Traits
-Common traits can be automatically implemented for types using the `#[derive(...)]` attribute. In [src/game/types.rs](file:///home/mdfranz/github/rungling-bay/src/game/types.rs), structures derive basic capabilities:
+Common traits can be automatically implemented for types using the `#[derive(...)]` attribute. In [src/game/types.rs](src/game/types.rs), structures derive basic capabilities:
 
 ```rust
 #[derive(Debug, Clone)]
@@ -490,7 +490,7 @@ pub struct Carrier {
 For complex logic, traits are implemented manually.
 
 #### 1. `Iterator` (Standard Library)
-An iterator must define an associated type `Item` and implement the `next()` method, which returns `Some(item)` on each call and `None` when exhausted. In [src/game/sound.rs](file:///home/mdfranz/github/rungling-bay/src/game/sound.rs), `SynthSound` generates audio waveforms procedurally, one sample (f32 float) at a time:
+An iterator must define an associated type `Item` and implement the `next()` method, which returns `Some(item)` on each call and `None` when exhausted. In [src/game/sound.rs](src/game/sound.rs), `SynthSound` generates audio waveforms procedurally, one sample (f32 float) at a time:
 
 ```rust
 impl Iterator for SynthSound {
@@ -556,7 +556,7 @@ impl Source for SynthSound {
 ```
 
 #### 3. `Widget` (Ratatui Crate)
-To draw the game, we implement `Widget` for `&Game` in [src/game/draw.rs](file:///home/mdfranz/github/rungling-bay/src/game/draw.rs):
+To draw the game, we implement `Widget` for `&Game` in [src/game/draw.rs](src/game/draw.rs):
 
 ```rust
 impl Widget for &Game {
@@ -574,7 +574,7 @@ impl Widget for &Game {
 
 Declarative macros (`macro_rules!`) write code that writes other code. They eliminate duplication when the same logic applies to different types, all while maintaining compile-time type-safety.
 
-In [src/game/input.rs](file:///home/mdfranz/github/rungling-bay/src/game/input.rs), the lock-on targeting system scans four different entity collections: `boats`, `factories`, `tanks`, and `static_aas`. Each has similar fields (`x`, `y`, `active`, `sinking_timer`) but is a different struct. Without a macro, the search loop would be copy-pasted four times.
+In [src/game/input.rs](src/game/input.rs), the lock-on targeting system scans four different entity collections: `boats`, `factories`, `tanks`, and `static_aas`. Each has similar fields (`x`, `y`, `active`, `sinking_timer`) but is a different struct. Without a macro, the search loop would be copy-pasted four times.
 
 Instead, a **local macro** parameterizes the differences:
 
@@ -630,7 +630,7 @@ pub fn get_locked_target(&self) -> LockedTarget {
 ### Error Propagation with `?`
 The `?` operator unwraps a `Result` on success or **returns the error immediately** to the caller. This eliminates verbose error handling boilerplate.
 
-In [src/main.rs](file:///home/mdfranz/github/rungling-bay/src/main.rs), terminal setup calls multiple operations that can fail. Each `?` short-circuits the function if an error occurs:
+In [src/main.rs](src/main.rs), terminal setup calls multiple operations that can fail. Each `?` short-circuits the function if an error occurs:
 
 ```rust
 fn main() -> io::Result<()> {
@@ -666,7 +666,7 @@ The `?` operator eliminates this repetition: one character instead of five lines
 ### Option Combinators
 Rust provides methods like `is_some_and`, `filter`, and `map` on the `Option` type to perform logic without manual pattern matching.
 
-In [src/game/physics.rs](file:///home/mdfranz/github/rungling-bay/src/game/physics.rs), a target coordinate option is filtered based on flag checks:
+In [src/game/physics.rs](src/game/physics.rs), a target coordinate option is filtered based on flag checks:
 
 ```rust
 if let Some((bx, by)) = ciws_pos.filter(|_| !interception_rolled && min_dist < BOAT_DETECTION_RANGE) {
@@ -682,7 +682,7 @@ if let Some((bx, by)) = ciws_pos.filter(|_| !interception_rolled && min_dist < B
 *Rust by Example References: [Vectors](https://doc.rust-lang.org/rust-by-example/std/vec.html), [HashMaps](https://doc.rust-lang.org/rust-by-example/std/hash.html)*
 
 ### Vectors
-Vectors are growable, heap-allocated arrays (`Vec<T>`). In [src/game/physics.rs](file:///home/mdfranz/github/rungling-bay/src/game/physics.rs), they are cleared, modified, and pruned. The `retain_mut` method updates matching elements in-place and removes dead ones:
+Vectors are growable, heap-allocated arrays (`Vec<T>`). In [src/game/physics.rs](src/game/physics.rs), they are cleared, modified, and pruned. The `retain_mut` method updates matching elements in-place and removes dead ones:
 
 ```rust
 // Age and filter out explosions older than 15 frames
@@ -695,7 +695,7 @@ fn update_explosions(&mut self) {
 ```
 
 ### HashMaps
-HashMaps store key-value pairs (`HashMap<K, V>`). In [src/game/game.rs](file:///home/mdfranz/github/rungling-bay/src/game/game.rs), maps track joystick states:
+HashMaps store key-value pairs (`HashMap<K, V>`). In [src/game/game.rs](src/game/game.rs), maps track joystick states:
 
 ```rust
 pub struct Game {
@@ -766,7 +766,7 @@ Rungling Bay decouples input polling and sound mixing from the main graphics/phy
 
 Rust has first-class support for unit testing. Test blocks are marked with `#[cfg(test)]` (compiled only during tests) and individual tests with `#[test]`.
 
-At the end of [src/game/physics.rs](file:///home/mdfranz/github/rungling-bay/src/game/physics.rs), unit tests validate critical math operations:
+At the end of [src/game/physics.rs](src/game/physics.rs), unit tests validate critical math operations:
 
 ```rust
 #[cfg(test)]
