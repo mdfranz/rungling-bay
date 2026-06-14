@@ -47,9 +47,7 @@ impl Game {
         let x = area.left() + sx;
         let y = area.top() + sy;
         if x < area.right() && y < area.bottom() {
-            let mut s = String::with_capacity(4);
-            s.push(ch);
-            buf[(x, y)].set_symbol(&s).set_style(style);
+            buf[(x, y)].set_char(ch).set_style(style);
         }
     }
 
@@ -77,6 +75,12 @@ impl Game {
 
     /// Returns background+foreground Style for a world cell (ocean / coast / road / carrier).
     pub fn get_map_style(&self, x: i32, y: i32) -> Style {
+        let threshold = if self.island.active { Some(self.get_coastline_threshold(y)) } else { None };
+        self.get_map_style_with_threshold(x, y, threshold)
+    }
+
+    /// Same as `get_map_style` but accepts a precomputed coastline threshold to avoid redundant trig.
+    pub fn get_map_style_with_threshold(&self, x: i32, y: i32, threshold: Option<f64>) -> Style {
         // Carrier deck
         if x >= self.carrier.x
             && x < self.carrier.x + self.carrier.width
@@ -94,7 +98,11 @@ impl Game {
         }
 
         // Coastline / terrain
-        let (is_land, is_sand) = self.get_coastline_style(x, y);
+        let xf = x as f64;
+        let (is_land, is_sand) = match threshold {
+            Some(t) => (xf >= t, xf >= t && xf < t + 3.0),
+            None => (false, false),
+        };
         if is_land {
             if !is_sand && self.is_road(x, y) {
                 return Style::new().bg(DIM_GRAY);
@@ -127,11 +135,18 @@ impl Game {
         let w = area.width as i32;
 
         // 1. Background: ocean / terrain / carrier
+        // Precompute coastline threshold per world-row to avoid redundant sin/cos per cell.
+        let coast_thresholds: Vec<f64> = (0..play_h)
+            .map(|sy| self.get_coastline_threshold(sy + cam_y))
+            .collect();
+
         for sy in 0..play_h {
+            let vy = sy + cam_y;
+            let threshold_opt = if self.island.active { Some(coast_thresholds[sy as usize]) } else { None };
+            let threshold = coast_thresholds[sy as usize];
             for sx in 0..w {
                 let vx = sx + cam_x;
-                let vy = sy + cam_y;
-                let mut style = self.get_map_style(vx, vy);
+                let mut style = self.get_map_style_with_threshold(vx, vy, threshold_opt);
                 let mut r = ' ';
 
                 if vx >= self.carrier.x
@@ -182,8 +197,10 @@ impl Game {
                         }
                     }
                 } else {
-                    let (is_land, is_sand) = self.get_coastline_style(vx, vy);
+                    let vxf = vx as f64;
+                    let is_land = vxf >= threshold;
                     if is_land {
+                        let is_sand = vxf < threshold + 3.0;
                         if !is_sand && self.is_road(vx, vy) {
                             let w_val = self.world_width;
                             let h_val = self.world_height;
