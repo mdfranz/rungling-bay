@@ -1696,4 +1696,158 @@ mod tests {
         assert!(game.heli.x > 10.0);
         assert!(game.heli.y > 10.0);
     }
+
+    #[test]
+    fn test_bullet_and_missile_object_pooling() {
+        let mut game = Game::new(80, 40, None);
+        game.bullets.clear();
+        game.missiles.clear();
+
+        // 1. Test player bullets capacity (limit: 16)
+        for i in 0..16 {
+            game.spawn_player_bullet(10.0, 10.0, 1.0, 0.0);
+            assert_eq!(game.bullets.len(), i + 1);
+            assert!(game.bullets[i].active);
+        }
+        // Attempt spawning 17th bullet (should reuse or drop, capacity remains 16)
+        game.spawn_player_bullet(20.0, 20.0, 1.0, 0.0);
+        assert_eq!(game.bullets.len(), 16);
+
+        // Deactivate one bullet (index 4) and verify it gets reused
+        game.bullets[4].active = false;
+        game.spawn_player_bullet(99.0, 99.0, 0.0, 0.0);
+        assert_eq!(game.bullets.len(), 16);
+        assert!(game.bullets[4].active);
+        assert_eq!(game.bullets[4].x, 99.0);
+
+        // 2. Test player missiles capacity (limit: 16)
+        for i in 0..16 {
+            game.spawn_player_missile(10.0, 10.0, 1.0, 0.0);
+            assert_eq!(game.missiles.len(), i + 1);
+            assert!(game.missiles[i].active);
+        }
+        game.spawn_player_missile(20.0, 20.0, 1.0, 0.0);
+        assert_eq!(game.missiles.len(), 16);
+
+        game.missiles[7].active = false;
+        game.spawn_player_missile(88.0, 88.0, 0.0, 0.0);
+        assert_eq!(game.missiles.len(), 16);
+        assert!(game.missiles[7].active);
+        assert_eq!(game.missiles[7].x, 88.0);
+    }
+
+    #[test]
+    fn test_blast_damage_curves() {
+        let mut game = Game::new(80, 40, None);
+        game.heli.landed = false;
+        game.heli.respawn_timer = 0;
+        game.heli.armor = 100.0;
+        game.heli.x = 10.0;
+        game.heli.y = 10.0;
+
+        // Blast inside range (distance = 0, radius = 5.0, damage = 20.0)
+        game.apply_blast_damage(10.0, 10.0, 5.0, 20.0);
+        assert_eq!(game.heli.armor, 80.0);
+
+        // Blast outside range (distance = 15.0, radius = 5.0, damage = 30.0)
+        game.apply_blast_damage(10.0, 25.0, 5.0, 30.0);
+        assert_eq!(game.heli.armor, 80.0, "Heli outside blast radius should not take damage");
+
+        // Lethal blast to verify zeroing armor and trigger destruction sequence
+        game.apply_blast_damage(10.0, 10.0, 5.0, 100.0);
+        assert_eq!(game.heli.armor, 0.0);
+    }
+
+    #[test]
+    fn test_sinking_timers_and_damage() {
+        let mut game = Game::new(80, 40, None);
+        game.boats.clear();
+        game.factories.clear();
+        game.missiles.clear();
+
+        // 1. Boat vs Missile impact
+        game.boats.push(Boat {
+            x: 20.0,
+            y: 20.0,
+            vx: 0.0,
+            health: 9,
+            max_health: 9,
+            active: true,
+            fire_cooldown: 0,
+            missile_cooldown: 0,
+            sinking_timer: 0,
+            patrol_min_x: 0.0,
+        });
+
+        // Spawn player guided missile right at the boat
+        game.missiles.push(Missile {
+            x: 20.0,
+            y: 20.0,
+            start_x: 20.0,
+            start_y: 20.0,
+            vx: 0.0,
+            vy: 0.0,
+            active: true,
+            interception_rolled: false,
+            is_enemy: false,
+            is_carrier: false,
+        });
+
+        // Resolve collision
+        game.check_player_missile_vs_targets(0);
+        assert!(!game.missiles[0].active, "Missile should deactivate on impact");
+        assert_eq!(game.boats[0].health, 0, "Boat health should drop to 0");
+        assert_eq!(game.boats[0].sinking_timer, 45, "Boat should start sinking");
+
+        // 2. Factory vs Missile impact
+        game.factories.push(Factory {
+            x: 50.0,
+            y: 50.0,
+            health: 20,
+            max_health: 20,
+            active: true,
+            fire_cooldown: 0,
+            sinking_timer: 0,
+            drones_remaining: 5,
+        });
+
+        game.missiles.push(Missile {
+            x: 50.0,
+            y: 50.0,
+            start_x: 50.0,
+            start_y: 50.0,
+            vx: 0.0,
+            vy: 0.0,
+            active: true,
+            interception_rolled: false,
+            is_enemy: false,
+            is_carrier: false,
+        });
+
+        // First hit (deal 10 damage to factory)
+        game.check_player_missile_vs_targets(1);
+        assert!(!game.missiles[1].active);
+        assert_eq!(game.factories[0].health, 10, "Factory should lose 10 health");
+        assert_eq!(game.factories[0].sinking_timer, 0, "Factory should not sink yet");
+
+        // Spawn second missile
+        game.missiles.push(Missile {
+            x: 50.0,
+            y: 50.0,
+            start_x: 50.0,
+            start_y: 50.0,
+            vx: 0.0,
+            vy: 0.0,
+            active: true,
+            interception_rolled: false,
+            is_enemy: false,
+            is_carrier: false,
+        });
+
+        // Second hit (deal 10 more damage, bringing health to 0)
+        game.check_player_missile_vs_targets(2);
+        assert!(!game.missiles[2].active);
+        assert_eq!(game.factories[0].health, 0, "Factory health should reach 0");
+        assert_eq!(game.factories[0].sinking_timer, 45, "Factory sinking should be triggered");
+    }
 }
