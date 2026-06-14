@@ -443,13 +443,11 @@ impl Game {
                     let nv_y = mvy * 0.82 + ny * spd * 0.18;
 
                     let mut new_ir = interception_rolled;
-                    if let Some((bx, by)) = ciws_pos {
-                        if !interception_rolled && min_dist < BOAT_DETECTION_RANGE {
-                            new_ir = true;
-                            if rand::random::<f64>() < 0.10 {
-                                let bullet_spd = 3.5;
-                                ciws_spawns.push((bx, by, -(dx / min_dist) * bullet_spd, -(dy / min_dist) * bullet_spd));
-                            }
+                    if let Some((bx, by)) = ciws_pos.filter(|_| !interception_rolled && min_dist < BOAT_DETECTION_RANGE) {
+                        new_ir = true;
+                        if rand::random::<f64>() < 0.10 {
+                            let bullet_spd = 3.5;
+                            ciws_spawns.push((bx, by, -(dx / min_dist) * bullet_spd, -(dy / min_dist) * bullet_spd));
                         }
                     }
                     (nv_x, nv_y, new_ir)
@@ -875,6 +873,7 @@ impl Game {
     // Remaining stubs (enemy AI, waves)
     // -----------------------------------------------------------------------
 
+    #[allow(clippy::too_many_arguments)]
     fn tick_sinking(
         &mut self,
         timer: &mut i32,
@@ -959,6 +958,7 @@ impl Game {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn tick_aa_fire(
         &mut self,
         x: f64,
@@ -1326,8 +1326,11 @@ impl Game {
             }
 
             // Factory ground-launched missile at Carrier (Wave 4+)
-            if self.wave >= 4 && self.factories[f_idx].active && self.factories[f_idx].sinking_timer == 0 {
-                if (self.ticks + f_idx as i32 * 200) % 800 == 0 {
+            if self.wave >= 4
+                && self.factories[f_idx].active
+                && self.factories[f_idx].sinking_timer == 0
+                && (self.ticks + f_idx as i32 * 200) % 800 == 0
+            {
                     let target_x = (self.carrier.x + self.carrier.width / 2) as f64;
                     let target_y = (self.carrier.y + self.carrier.height / 2) as f64;
                     let fx = self.factories[f_idx].x;
@@ -1346,7 +1349,6 @@ impl Game {
                         );
                         self.play_sound("missile");
                     }
-                }
             }
 
             // Factory drone replenishment
@@ -1619,4 +1621,79 @@ impl Game {
 #[inline]
 fn aabb(ax: f64, ay: f64, bx: f64, by: f64, hw: f64, hh: f64) -> bool {
     (ax - bx).abs() < hw && (ay - by).abs() < hh
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::game::types::*;
+
+    #[test]
+    fn test_aabb_collision() {
+        assert!(aabb(10.0, 10.0, 10.5, 10.5, 1.0, 1.0));
+        assert!(!aabb(10.0, 10.0, 12.0, 12.0, 1.0, 1.0));
+    }
+
+    #[test]
+    fn test_get_locked_target() {
+        let mut game = Game::new(80, 40, None);
+
+        // Put heli at (10.0, 10.0) facing East (dir = 2)
+        game.heli.x = 10.0;
+        game.heli.y = 10.0;
+        game.heli.dir = 2; // East
+
+        // Clear all initial targets to isolate our test
+        game.boats.clear();
+        game.factories.clear();
+        game.tanks.clear();
+        game.static_aas.clear();
+
+        // 1. Boat to the West (behind the heli): should NOT be locked
+        game.boats.push(Boat {
+            x: 5.0,
+            y: 10.0,
+            vx: 0.0,
+            health: 9,
+            max_health: 9,
+            active: true,
+            fire_cooldown: 0,
+            missile_cooldown: 0,
+            sinking_timer: 0,
+            patrol_min_x: 0.0,
+        });
+
+        // 2. Boat to the East (in front of the heli): should be locked!
+        game.boats.push(Boat {
+            x: 20.0,
+            y: 10.0,
+            vx: 0.0,
+            health: 9,
+            max_health: 9,
+            active: true,
+            fire_cooldown: 0,
+            missile_cooldown: 0,
+            sinking_timer: 0,
+            patrol_min_x: 0.0,
+        });
+
+        let locked = game.get_locked_target();
+        assert_eq!(locked, LockedTarget::Boat(1));
+    }
+
+    #[test]
+    fn test_helicopter_movement() {
+        let mut game = Game::new(80, 40, None);
+        game.heli.landed = false;
+        game.heli.x = 10.0;
+        game.heli.y = 10.0;
+        game.heli.vx = 1.0;
+        game.heli.vy = 0.5;
+        game.heli.fuel = 100.0;
+
+        game.update_helicopter();
+
+        assert!(game.heli.x > 10.0);
+        assert!(game.heli.y > 10.0);
+    }
 }

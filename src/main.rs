@@ -15,7 +15,7 @@ use tracing::info;
 use tracing_appender::rolling;
 use tracing_subscriber::fmt;
 
-use game::game::Game;
+use game::Game;
 use game::input::InputMsg;
 
 fn main() -> io::Result<()> {
@@ -26,6 +26,47 @@ fn main() -> io::Result<()> {
 
     info!("Rungling Bay Game Started");
 
+    // Initialize audio system
+    let (audio_tx, audio_rx) = mpsc::channel::<game::sound::SoundType>();
+    
+    // Spawn audio playback thread
+    thread::spawn(move || {
+        use rodio::DeviceSinkBuilder;
+        let handle = match DeviceSinkBuilder::open_default_sink() {
+            Ok(res) => res,
+            Err(e) => {
+                tracing::warn!("Failed to initialize audio speaker: {e} (running in silent mode)");
+                while audio_rx.recv().is_ok() {}
+                return;
+            }
+        };
+
+        tracing::info!("Audio system successfully initialized using Rodio");
+
+        let mut last_play_time = std::collections::HashMap::new();
+
+        while let Ok(sound_type) = audio_rx.recv() {
+            let now = Instant::now();
+            if last_play_time.get(&sound_type).is_some_and(|&prev| now.duration_since(prev) < Duration::from_millis(60)) {
+                continue;
+            }
+            last_play_time.insert(sound_type, now);
+
+            let (dur, volume) = match sound_type {
+                game::sound::SoundType::Warning => (Duration::from_millis(500), 0.20),
+                game::sound::SoundType::Laser => (Duration::from_millis(55), 0.28),
+                game::sound::SoundType::Missile => (Duration::from_millis(400), 0.20),
+                game::sound::SoundType::Explosion => (Duration::from_millis(800), 0.38),
+                game::sound::SoundType::Speedboat => (Duration::from_millis(300), 0.18),
+            };
+
+            let source = game::sound::SynthSound::new(44100, dur, sound_type, volume);
+            let player = rodio::Player::connect_new(handle.mixer());
+            player.append(source);
+            player.detach();
+        }
+    });
+
     // Terminal setup
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -34,23 +75,15 @@ fn main() -> io::Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     let size = terminal.size()?;
-    let mut game = Game::new(size.width as i32, size.height as i32);
+    let mut game = Game::new(size.width as i32, size.height as i32, Some(audio_tx));
 
     // Input channel: keyboard thread → main loop
     let (tx, rx) = mpsc::channel::<InputMsg>();
     thread::spawn(move || {
         loop {
             match event::read() {
-                Ok(Event::Key(key)) => {
-                    if tx.send(InputMsg::Key(key)).is_err() {
-                        break;
-                    }
-                }
-                Ok(Event::Resize(w, h)) => {
-                    if tx.send(InputMsg::Resize(w, h)).is_err() {
-                        break;
-                    }
-                }
+                Ok(Event::Key(key)) if tx.send(InputMsg::Key(key)).is_err() => break,
+                Ok(Event::Resize(w, h)) if tx.send(InputMsg::Resize(w, h)).is_err() => break,
                 _ => {}
             }
         }

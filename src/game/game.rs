@@ -38,10 +38,11 @@ pub struct Game {
     pub joystick_axes: HashMap<u8, i16>,
     pub joystick_buttons: HashMap<u8, bool>,
     pub joystick_last_btn: HashMap<u8, bool>,
+    pub audio_tx: Option<std::sync::mpsc::Sender<super::sound::SoundType>>,
 }
 
 impl Game {
-    pub fn new(width: i32, height: i32) -> Self {
+    pub fn new(width: i32, height: i32, audio_tx: Option<std::sync::mpsc::Sender<super::sound::SoundType>>) -> Self {
         let playable_height = (height - 6).max(10);
         let world_width = (width * 2).max(80);
         let world_height = playable_height * 2;
@@ -266,6 +267,7 @@ impl Game {
             joystick_axes: HashMap::new(),
             joystick_buttons: HashMap::new(),
             joystick_last_btn: HashMap::new(),
+            audio_tx,
         };
 
         // Snap boats to coastline (matching Go's post-init loop)
@@ -345,50 +347,89 @@ impl Game {
 
     pub fn spawn_player_bullet(&mut self, x: f64, y: f64, vx: f64, vy: f64) {
         use super::types::Bullet;
-        self.bullets.push(Bullet {
+        let b = Bullet {
             x, y, start_x: x, start_y: y, vx, vy,
             active: true, is_enemy: false, is_countermeasure: false,
-        });
+        };
+        if let Some(slot) = self.bullets.iter().position(|bullet| !bullet.active) {
+            self.bullets[slot] = b;
+        } else if self.bullets.len() < 16 {
+            self.bullets.push(b);
+        }
     }
 
     pub fn spawn_player_missile(&mut self, x: f64, y: f64, vx: f64, vy: f64) {
         use super::types::Missile;
-        self.missiles.push(Missile {
+        let m = Missile {
             x, y, start_x: x, start_y: y, vx, vy,
             active: true, interception_rolled: false, is_enemy: false, is_carrier: false,
-        });
+        };
+        if let Some(slot) = self.missiles.iter().position(|missile| !missile.active) {
+            self.missiles[slot] = m;
+        } else if self.missiles.len() < 16 {
+            self.missiles.push(m);
+        }
     }
 
     pub fn spawn_carrier_missile(&mut self, x: f64, y: f64, vx: f64, vy: f64) {
         use super::types::Missile;
-        self.missiles.push(Missile {
+        let m = Missile {
             x, y, start_x: x, start_y: y, vx, vy,
             active: true, interception_rolled: false, is_enemy: false, is_carrier: true,
-        });
+        };
+        if let Some(slot) = self.missiles.iter().position(|missile| !missile.active) {
+            self.missiles[slot] = m;
+        } else if self.missiles.len() < 16 {
+            self.missiles.push(m);
+        }
     }
 
     pub fn spawn_enemy_bullet(&mut self, x: f64, y: f64, vx: f64, vy: f64) {
         use super::types::Bullet;
-        self.bullets.push(Bullet {
+        let b = Bullet {
             x, y, start_x: x, start_y: y, vx, vy,
             active: true, is_enemy: true, is_countermeasure: false,
-        });
+        };
+        if let Some(slot) = self.bullets.iter().position(|bullet| !bullet.active) {
+            self.bullets[slot] = b;
+        } else if self.bullets.len() < 24 {
+            self.bullets.push(b);
+        }
     }
 
     pub fn spawn_enemy_missile(&mut self, x: f64, y: f64, vx: f64, vy: f64) {
         use super::types::Missile;
-        self.missiles.push(Missile {
+        let m = Missile {
             x, y, start_x: x, start_y: y, vx, vy,
             active: true, interception_rolled: false, is_enemy: true, is_carrier: false,
-        });
+        };
+        if let Some(slot) = self.missiles.iter().position(|missile| !missile.active) {
+            self.missiles[slot] = m;
+        } else if self.missiles.len() < 16 {
+            self.missiles.push(m);
+        }
     }
 
     pub fn append_drone(&mut self, drone: super::types::Drone) {
-        self.drones.push(drone);
+        if let Some(slot) = self.drones.iter().position(|d| !d.active) {
+            self.drones[slot] = drone;
+        } else {
+            self.drones.push(drone);
+        }
     }
 
-    pub fn play_sound(&self, _name: &str) {
-        // stub — replaced when sound module is wired
+    pub fn play_sound(&self, name: &str) {
+        if let Some(tx) = &self.audio_tx {
+            let sound_type = match name {
+                "warning" => super::sound::SoundType::Warning,
+                "laser" => super::sound::SoundType::Laser,
+                "missile" => super::sound::SoundType::Missile,
+                "explosion" => super::sound::SoundType::Explosion,
+                "speedboat" => super::sound::SoundType::Speedboat,
+                _ => return,
+            };
+            let _ = tx.send(sound_type);
+        }
     }
 
     pub fn reset_factories(&mut self) {

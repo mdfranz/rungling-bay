@@ -85,9 +85,9 @@ impl Game {
         {
             let cy = y - self.carrier.y;
             let cx = x - self.carrier.x;
-            let left_taper = (cy == 0 && cx < 4) || (cy == self.carrier.height - 1 && cx < 4);
+            let left_taper = (cy == 0 || cy == self.carrier.height - 1) && cx < 4;
             let right_taper =
-                (cy == 0 && cx >= self.carrier.width - 4) || (cy == self.carrier.height - 1 && cx >= self.carrier.width - 4);
+                (cy == 0 || cy == self.carrier.height - 1) && cx >= self.carrier.width - 4;
             if !left_taper && !right_taper {
                 return Style::new().bg(Color::DarkGray).fg(Color::White);
             }
@@ -141,9 +141,9 @@ impl Game {
                 {
                     let cy = vy - self.carrier.y;
                     let cx = vx - self.carrier.x;
-                    let left_taper = (cy == 0 && cx < 4) || (cy == self.carrier.height - 1 && cx < 4);
-                    let right_taper = (cy == 0 && cx >= self.carrier.width - 4)
-                        || (cy == self.carrier.height - 1 && cx >= self.carrier.width - 4);
+                    let left_taper = (cy == 0 || cy == self.carrier.height - 1) && cx < 4;
+                    let right_taper = (cy == 0 || cy == self.carrier.height - 1)
+                        && cx >= self.carrier.width - 4;
 
                     if !left_taper && !right_taper {
                         if self.carrier_destroying && rand::random::<u8>() % 100 < 40 {
@@ -279,17 +279,14 @@ impl Game {
             (4, 2), (18, 1), (10, 3), (22, 4), (7, 1), (14, 4),
             (2, 3), (20, 3), (12, 1), (16, 2), (5, 4), (24, 2),
         ];
-        let mut num_columns = (damage_pct / 8.0) as usize;
-        if num_columns < 1 { num_columns = 1; }
-        if num_columns > 12 { num_columns = 12; }
+        let num_columns = ((damage_pct / 8.0) as usize).clamp(1, 12);
 
         let max_height = 5 + (damage_pct * 0.12) as i32;
         let speed_div = if damage_pct >= 75.0 { 1 } else if damage_pct >= 40.0 { 2 } else { 3 };
         let fire_height = if damage_pct >= 20.0 { (damage_pct / 25.0) as i32 } else { 0 };
         let play_h = area.height.saturating_sub(6) as i32;
 
-        for col in 0..num_columns {
-            let (sdx, sdy) = sources[col];
+        for (col, &(sdx, sdy)) in sources.iter().enumerate().take(num_columns) {
             let base_sx = self.carrier.x + sdx;
             let base_sy = self.carrier.y + sdy;
             let col_osc = ((self.ticks as f64 / 6.0 + col as f64).sin() * 1.5) as i32;
@@ -397,9 +394,9 @@ impl Game {
             let fy = fact.y.round() as i32;
             let is_destroying = fact.sinking_timer > 0;
 
-            for r in 0..5usize {
-                for c in 0..17usize {
-                    let ch = FACTORY_SPRITE[r][c];
+            for (r, row) in FACTORY_SPRITE.iter().enumerate() {
+                for (c, &sprite_ch) in row.iter().enumerate() {
+                    let ch = sprite_ch;
                     if ch == ' ' { continue; }
                     let mx = fx + c as i32 - 8;
                     let my = fy + r as i32 - 2;
@@ -616,9 +613,9 @@ impl Game {
         let rotor_char = ROTOR_FRAMES[h.rotor_state % 4];
         let play_h = area.height.saturating_sub(6) as i32;
 
-        for r in 0..5usize {
-            for c in 0..7usize {
-                let mut ch = SPRITES[h.dir % 8][r][c];
+        for (r, row) in SPRITES[h.dir % 8].iter().enumerate() {
+            for (c, &sprite_ch) in row.iter().enumerate() {
+                let mut ch = sprite_ch;
                 if ch == ' ' { continue; }
                 let mx = hx + c as i32 - 3;
                 let my = hy + r as i32 - 2;
@@ -665,12 +662,10 @@ impl Game {
 
         // Incoming missile warning
         let has_incoming = self.missiles.iter().any(|m| m.active && m.is_enemy);
-        if has_incoming {
-            if (self.heli.rotor_state / 2) % 2 == 0 {
-                self.draw_string(buf, area, self.width - 33, hud_y as i32,
-                    "⚠️ WARNING: INCOMING MISSILE ⚠️",
-                    border_style.fg(Color::Red).add_modifier(Modifier::BOLD));
-            }
+        if has_incoming && (self.heli.rotor_state / 2).is_multiple_of(2) {
+            self.draw_string(buf, area, self.width - 33, hud_y as i32,
+                "⚠️ WARNING: INCOMING MISSILE ⚠️",
+                border_style.fg(Color::Red).add_modifier(Modifier::BOLD));
             // sound stub: play_sound("warning")
         }
         // Stealth threat
@@ -835,6 +830,7 @@ impl Game {
         self.draw_radar(buf, area, hud_y);
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn draw_hud_stat(&self, buf: &mut Buffer, area: Rect, x: i32, y: i32,
         label: &str, value: &str, label_style: Style, value_style: Style) -> i32
     {
@@ -921,6 +917,7 @@ impl Game {
 // ---------------------------------------------------------------------------
 
 impl Game {
+    #[allow(clippy::too_many_arguments)]
     fn draw_modal_box(&self, buf: &mut Buffer, area: Rect, start_x: i32, start_y: i32,
         box_w: i32, box_h: i32, bg: Color)
     {

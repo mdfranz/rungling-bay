@@ -66,13 +66,11 @@ impl Game {
                 | KeyCode::Char('w')
                 | KeyCode::Char('W')
                 | KeyCode::Char('l')
-                | KeyCode::Char('L') => {
-                    if self.heli.takeoff_cooldown == 0 {
-                        self.heli.landed = false;
-                        self.heli.vy = -0.1;
-                        self.heli.takeoff_cooldown = 25;
-                        info!(x = self.heli.x, y = self.heli.y, "Takeoff initiated");
-                    }
+                | KeyCode::Char('L') if self.heli.takeoff_cooldown == 0 => {
+                    self.heli.landed = false;
+                    self.heli.vy = -0.1;
+                    self.heli.takeoff_cooldown = 25;
+                    info!(x = self.heli.x, y = self.heli.y, "Takeoff initiated");
                 }
                 _ => {}
             }
