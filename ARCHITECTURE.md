@@ -111,3 +111,7 @@ The screen-buffered terminal rendering uses **Ratatui**. Rather than compiling s
 buffer.get_mut(x, y).set_char(symbol).set_fg(color);
 ```
 Ratatui diffs this buffer against the prior frame to flash only the modified cells, resulting in stutter-free terminal drawings.
+
+### 4. Camera Viewport & Scrolling
+The camera tracks the player's helicopter dynamically, shifting only when the helicopter approaches the screen boundaries. It maintains horizontal and vertical margins around the viewport, allowing local maneuvers without constant scrolling. The coordinates are clamped to the world boundary map to prevent rendering empty space.
+
