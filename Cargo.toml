@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 ratatui = "0.30"
 crossterm = "0.29"
-rodio = "0.22"
+rodio = "0.23"
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = "0.3"
